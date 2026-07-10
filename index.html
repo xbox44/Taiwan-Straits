@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Taiwan Strait Strategy • Prototype</title>
+<title>Taiwan Strait Strategy • v0.1.1</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   body { background: #0f172a; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
@@ -15,16 +15,14 @@
   }
   .military-btn:active { background: #334155; transform: scale(0.98); }
   .log { font-family: ui-monospace, monospace; font-size: 13px; }
-  .hex { cursor: pointer; }
 </style>
 </head>
 <body class="p-4">
 <div class="max-w-[1200px] mx-auto">
-  <!-- Header -->
   <div class="flex items-center justify-between mb-4">
     <div>
-      <h1 class="text-3xl font-bold tracking-tight">Taiwan Strait 2027</h1>
-      <p class="text-slate-400 text-sm">Strategy Prototype • You defend (Blue) vs AI invader (Red)</p>
+      <h1 class="text-3xl font-bold tracking-tight">Taiwan Strait 2027 <span class="text-sm font-normal text-slate-400">(v0.1.1 Touch Improved)</span></h1>
+      <p class="text-slate-400 text-sm">Blue defender vs Red AI • Tap blue units firmly</p>
     </div>
     <div class="flex items-center gap-4">
       <div id="turn-info" class="px-4 py-2 bg-slate-800 rounded-lg text-sm font-mono">
@@ -32,24 +30,22 @@
       </div>
       <button onclick="endTurn()" 
               class="military-btn px-8 py-3 text-lg bg-red-600 hover:bg-red-500 border-red-500 text-white flex items-center gap-2">
-        END TURN <span class="text-xs opacity-75">(Red AI moves)</span>
+        END TURN
       </button>
     </div>
   </div>
 
   <div class="flex gap-4">
-    <!-- Canvas -->
     <div class="flex-1">
       <canvas id="game-canvas" width="1100" height="720" class="w-full max-w-[1100px]"></canvas>
-      <p class="text-xs text-slate-500 mt-2 text-center">Tap unit to select • Tap highlighted hex to move • Combat on contact</p>
+      <p class="text-xs text-slate-500 mt-2 text-center">Tap blue unit icons • Larger hit area • Visual tap feedback added</p>
     </div>
 
-    <!-- Sidebar -->
     <div class="w-80 bg-slate-900 border border-slate-700 rounded-xl p-4 flex flex-col">
       <div class="mb-4">
         <h3 class="font-semibold text-lg mb-1">Selected Unit</h3>
         <div id="unit-info" class="min-h-[120px] bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm">
-          <p class="text-slate-400">Tap a unit on the map</p>
+          <p class="text-slate-400">Tap a blue unit on the map</p>
         </div>
       </div>
 
@@ -58,19 +54,15 @@
         <div class="grid grid-cols-2 gap-2 text-xs">
           <div class="flex items-center gap-2"><div class="w-4 h-4 bg-red-500 rounded"></div> Red (Invader)</div>
           <div class="flex items-center gap-2"><div class="w-4 h-4 bg-blue-500 rounded"></div> Blue (Defender)</div>
-          <div class="col-span-2 text-[10px] text-slate-400">A=Amphib • M=Missile • F=Fighter • P=Patriot/AD • N=Naval • G=Ground</div>
         </div>
       </div>
 
       <div class="mt-auto">
-        <button onclick="resetGame()" 
-                class="military-btn w-full text-sm py-2 border-slate-600 hover:bg-slate-800">Reset Scenario</button>
-        <p class="text-[10px] text-center text-slate-500 mt-3">v0.1 • Hex prototype • Expandable</p>
+        <button onclick="resetGame()" class="military-btn w-full text-sm py-2 border-slate-600 hover:bg-slate-800">Reset Scenario</button>
       </div>
     </div>
   </div>
 
-  <!-- Log -->
   <div class="mt-4 bg-slate-950 border border-slate-700 rounded-xl p-3">
     <div class="flex items-center justify-between mb-1 px-1">
       <span class="text-xs font-semibold text-slate-400">ACTION LOG</span>
@@ -81,12 +73,7 @@
 </div>
 
 <script>
-// Tailwind script
-function initTailwind() {
-  document.documentElement.style.setProperty('--accent', '#3b82f6');
-}
-
-// Hex grid setup (axial coordinates, pointy-top)
+// Hex grid setup
 const HEX_SIZE = 38;
 const MAP_COLS = 17;
 const MAP_ROWS = 11;
@@ -94,30 +81,27 @@ let canvas, ctx;
 let units = [];
 let selectedUnit = null;
 let currentTurn = 1;
-let currentSide = 'blue'; // 'blue' = player, 'red' = AI
+let currentSide = 'blue';
 let logEl;
+let lastTap = null;
 
 function axialToPixel(q, r) {
   const x = HEX_SIZE * (Math.sqrt(3) * q + Math.sqrt(3) / 2 * r);
   const y = HEX_SIZE * (3 / 2 * r);
-  return { x: x + 80, y: y + 60 }; // offset for padding
+  return { x: x + 80, y: y + 60 };
 }
 
-function pixelToAxial(x, y) {
-  x -= 80; y -= 60;
-  const q = (Math.sqrt(3) / 3 * x - 1 / 3 * y) / HEX_SIZE;
-  const r = (2 / 3 * y) / HEX_SIZE;
+function pixelToAxial(px, py) {
+  px -= 80; py -= 60;
+  let q = (Math.sqrt(3)/3 * px - 1/3 * py) / HEX_SIZE;
+  let r = (2/3 * py) / HEX_SIZE;
   return hexRound(q, r);
 }
 
 function hexRound(q, r) {
   let s = -q - r;
-  let rq = Math.round(q);
-  let rr = Math.round(r);
-  let rs = Math.round(s);
-  const qDiff = Math.abs(rq - q);
-  const rDiff = Math.abs(rr - r);
-  const sDiff = Math.abs(rs - s);
+  let rq = Math.round(q), rr = Math.round(r), rs = Math.round(s);
+  const qDiff = Math.abs(rq - q), rDiff = Math.abs(rr - r), sDiff = Math.abs(rs - s);
   if (qDiff > rDiff && qDiff > sDiff) rq = -rr - rs;
   else if (rDiff > sDiff) rr = -rq - rs;
   else rs = -rq - rr;
@@ -136,16 +120,14 @@ function hexDistance(q1, r1, q2, r2) {
 }
 
 function isLand(q, r) {
-  // Simple stylized land masses
-  if (q <= 2) return true; // China coast
-  if (q >= 12 && q <= 15 && r >= 3 && r <= 8) return true; // Taiwan
-  if (q === 10 && r === 5) return true; // Penghu-ish
+  if (q <= 2) return true;
+  if (q >= 12 && q <= 15 && r >= 3 && r <= 8) return true;
+  if (q === 10 && r === 5) return true;
   return false;
 }
 
 function createInitialUnits() {
   units = [];
-  // Red (China) - invasion force on left
   const redUnits = [
     { id: 'r1', side: 'red', type: 'AMPH', q: 1, r: 4, hp: 12, move: 2, atk: 5, def: 4 },
     { id: 'r2', side: 'red', type: 'AMPH', q: 2, r: 5, hp: 12, move: 2, atk: 5, def: 4 },
@@ -153,11 +135,10 @@ function createInitialUnits() {
     { id: 'r4', side: 'red', type: 'F', q: 2, r: 3, hp: 6, move: 4, atk: 6, def: 2 },
     { id: 'r5', side: 'red', type: 'AMPH', q: 0, r: 6, hp: 10, move: 2, atk: 5, def: 4 },
   ];
-  // Blue (Taiwan + allies) - defending
   const blueUnits = [
-    { id: 'b1', side: 'blue', type: 'P', q: 13, r: 5, hp: 10, move: 1, atk: 6, def: 6 }, // Patriot/AD
+    { id: 'b1', side: 'blue', type: 'P', q: 13, r: 5, hp: 10, move: 1, atk: 6, def: 6 },
     { id: 'b2', side: 'blue', type: 'F', q: 14, r: 4, hp: 7, move: 5, atk: 5, def: 3 },
-    { id: 'b3', side: 'blue', type: 'N', q: 11, r: 6, hp: 14, move: 3, atk: 7, def: 6 }, // Naval
+    { id: 'b3', side: 'blue', type: 'N', q: 11, r: 6, hp: 14, move: 3, atk: 7, def: 6 },
     { id: 'b4', side: 'blue', type: 'G', q: 13, r: 6, hp: 9, move: 2, atk: 4, def: 5 },
     { id: 'b5', side: 'blue', type: 'P', q: 14, r: 7, hp: 10, move: 1, atk: 6, def: 6 },
   ];
@@ -166,6 +147,17 @@ function createInitialUnits() {
 
 function getUnitAt(q, r) {
   return units.find(u => u.q === q && u.r === r);
+}
+
+// Larger hit detection for touch
+function findUnitNear(q, r, tolerance = 1) {
+  for (let dq = -tolerance; dq <= tolerance; dq++) {
+    for (let dr = -tolerance; dr <= tolerance; dr++) {
+      const unit = getUnitAt(q + dq, r + dr);
+      if (unit) return unit;
+    }
+  }
+  return null;
 }
 
 function drawHex(q, r, fillColor, strokeColor = '#475569') {
@@ -188,12 +180,9 @@ function drawHex(q, r, fillColor, strokeColor = '#475569') {
 
 function drawMap() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  
-  // Background sea
   ctx.fillStyle = '#0c4a6e';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   
-  // Draw all hexes
   for (let q = 0; q < MAP_COLS; q++) {
     for (let r = 0; r < MAP_ROWS; r++) {
       const land = isLand(q, r);
@@ -202,7 +191,6 @@ function drawMap() {
     }
   }
   
-  // Labels
   ctx.fillStyle = '#f1f5f9';
   ctx.font = 'bold 16px system-ui';
   ctx.fillText('CHINA', 55, 95);
@@ -217,7 +205,6 @@ function drawUnits() {
     const { x, y } = axialToPixel(unit.q, unit.r);
     const isSelected = selectedUnit && selectedUnit.id === unit.id;
     
-    // Unit circle/background
     ctx.beginPath();
     ctx.arc(x, y, 18, 0, Math.PI * 2);
     ctx.fillStyle = unit.side === 'red' ? '#ef4444' : '#3b82f6';
@@ -231,14 +218,12 @@ function drawUnits() {
     ctx.lineWidth = 2;
     ctx.stroke();
     
-    // Type letter
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 13px ui-monospace';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(unit.type, x, y - 2);
     
-    // HP bar
     const hpPct = unit.hp / (unit.side === 'red' ? 12 : 10);
     ctx.fillStyle = '#1e2937';
     ctx.fillRect(x - 16, y + 14, 32, 5);
@@ -277,12 +262,81 @@ function draw() {
   drawMap();
   if (selectedUnit) highlightRange(selectedUnit);
   drawUnits();
+  if (lastTap) {
+    const {x, y} = lastTap;
+    ctx.beginPath();
+    ctx.arc(x, y, 12, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.7)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    setTimeout(() => { lastTap = null; draw(); }, 300);
+  }
+}
+
+// Unified pointer handler with improved touch detection
+function handlePointer(e) {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  let clientX = e.clientX !== undefined ? e.clientX : (e.touches ? e.touches[0].clientX : 0);
+  let clientY = e.clientY !== undefined ? e.clientY : (e.touches ? e.touches[0].clientY : 0);
+  
+  const clickX = clientX - rect.left;
+  const clickY = clientY - rect.top;
+  
+  lastTap = {x: clickX, y: clickY};
+  draw();
+  
+  const hex = pixelToAxial(clickX, clickY);
+  log(`Tap at (${hex.q}, ${hex.r})`);
+  
+  let clickedUnit = getUnitAt(hex.q, hex.r) || findUnitNear(hex.q, hex.r);
+  
+  if (clickedUnit) {
+    if (clickedUnit.side === currentSide) {
+      selectedUnit = clickedUnit;
+      log(`✅ Selected ${clickedUnit.type}`);
+      updateUnitInfo();
+      draw();
+    } else {
+      log(`Enemy unit - ${currentSide.toUpperCase()} phase only`);
+    }
+    return;
+  }
+  
+  // Move/attack logic
+  if (selectedUnit && currentSide === selectedUnit.side) {
+    const dist = hexDistance(selectedUnit.q, selectedUnit.r, hex.q, hex.r);
+    if (dist > 0 && dist <= selectedUnit.move) {
+      const targetUnit = getUnitAt(hex.q, hex.r);
+      
+      if (targetUnit && targetUnit.side !== selectedUnit.side) {
+        const damage = Math.max(1, Math.floor(selectedUnit.atk - targetUnit.def + (Math.random()*3 - 1.5)));
+        targetUnit.hp -= damage;
+        log(`${selectedUnit.type} hits ${targetUnit.type} for ${damage}`);
+        if (targetUnit.hp <= 0) {
+          units = units.filter(u => u !== targetUnit);
+          log(`${targetUnit.type} eliminated`);
+        }
+        if (selectedUnit.hp > 0) {
+          selectedUnit.q = hex.q; 
+          selectedUnit.r = hex.r;
+        }
+      } else {
+        selectedUnit.q = hex.q;
+        selectedUnit.r = hex.r;
+        log(`${selectedUnit.type} moved to (${hex.q}, ${hex.r})`);
+      }
+      selectedUnit = null;
+      draw();
+      updateUnitInfo();
+    }
+  }
 }
 
 function updateUnitInfo() {
   const infoDiv = document.getElementById('unit-info');
   if (!selectedUnit) {
-    infoDiv.innerHTML = '<p class="text-slate-400">Tap a unit on the map</p>';
+    infoDiv.innerHTML = '<p class="text-slate-400">Tap a blue unit on the map</p>';
     return;
   }
   const u = selectedUnit;
@@ -314,90 +368,16 @@ function clearLog() {
   if (logEl) logEl.innerHTML = '';
 }
 
-function handleCanvasClick(e) {
-  const rect = canvas.getBoundingClientRect();
-  const clickX = (e.clientX || e.touches[0].clientX) - rect.left;
-  const clickY = (e.clientY || e.touches[0].clientY) - rect.top;
-  
-  const hex = pixelToAxial(clickX, clickY);
-  const clickedUnit = getUnitAt(hex.q, hex.r);
-  
-  if (clickedUnit) {
-    // Select unit (only own side during their phase)
-    if (clickedUnit.side === currentSide) {
-      selectedUnit = clickedUnit;
-      draw();
-      updateUnitInfo();
-      log(`Selected ${clickedUnit.type} at (${hex.q},${hex.r})`);
-    } else {
-      log(`Can't select enemy unit during ${currentSide} phase.`);
-    }
-    return;
-  }
-  
-  // Move or attack
-  if (selectedUnit && currentSide === selectedUnit.side) {
-    const dist = hexDistance(selectedUnit.q, selectedUnit.r, hex.q, hex.r);
-    if (dist > 0 && dist <= selectedUnit.move) {
-      const targetUnit = getUnitAt(hex.q, hex.r);
-      
-      if (targetUnit && targetUnit.side !== selectedUnit.side) {
-        // Combat
-        const attacker = selectedUnit;
-        const defender = targetUnit;
-        const damageToDef = Math.max(1, Math.floor(attacker.atk - defender.def + (Math.random() * 3 - 1.5)));
-        defender.hp -= damageToDef;
-        log(`${attacker.type} attacks ${defender.type} for ${damageToDef} damage!`);
-        
-        if (defender.hp <= 0) {
-          units = units.filter(u => u.id !== defender.id);
-          log(`${defender.type} destroyed!`);
-        }
-        
-        // Simple counter-damage chance
-        if (Math.random() > 0.4 && defender.hp > 0) {
-          const counter = Math.max(1, Math.floor(defender.atk * 0.6 - attacker.def + (Math.random() * 2 - 1)));
-          attacker.hp -= counter;
-          log(`${defender.type} counters for ${counter} damage.`);
-          if (attacker.hp <= 0) {
-            units = units.filter(u => u.id !== attacker.id);
-            log(`${attacker.type} destroyed in counter!`);
-            selectedUnit = null;
-          }
-        }
-        
-        // Move attacker into the hex if defender dead or stayed
-        if (attacker.hp > 0) {
-          selectedUnit.q = hex.q;
-          selectedUnit.r = hex.r;
-        }
-      } else {
-        // Normal move
-        selectedUnit.q = hex.q;
-        selectedUnit.r = hex.r;
-        log(`${selectedUnit.type} moved to (${hex.q},${hex.r})`);
-      }
-      
-      selectedUnit = null;
-      draw();
-      updateUnitInfo();
-    } else {
-      log('Move too far or invalid hex.');
-    }
-  }
-}
-
 function doRedAI() {
   const redUnits = units.filter(u => u.side === 'red' && u.hp > 0);
   redUnits.forEach(unit => {
-    // Simple pursuit: move toward nearest blue unit or Taiwan center
     let bestTarget = null;
     let bestDist = 999;
     units.filter(u => u.side === 'blue' && u.hp > 0).forEach(blue => {
       const d = hexDistance(unit.q, unit.r, blue.q, blue.r);
       if (d < bestDist) { bestDist = d; bestTarget = blue; }
     });
-    if (!bestTarget) bestTarget = { q: 13, r: 5 }; // Taiwan center-ish
+    if (!bestTarget) bestTarget = { q: 13, r: 5 };
     
     const neighbors = getHexNeighbors(unit.q, unit.r);
     let bestMove = null;
@@ -416,7 +396,7 @@ function doRedAI() {
       if (!occupant || occupant.side === 'red') {
         unit.q = bestMove.q;
         unit.r = bestMove.r;
-        log(`Red ${unit.type} advanced toward Blue.`);
+        log(`Red ${unit.type} advanced.`);
       }
     }
   });
@@ -428,7 +408,6 @@ function endTurn() {
     currentSide = 'red';
     document.getElementById('phase').textContent = 'RED PHASE (AI)';
     doRedAI();
-    // Auto end red turn after AI
     setTimeout(() => {
       currentSide = 'blue';
       currentTurn++;
@@ -462,27 +441,19 @@ function resetGame() {
 }
 
 function initGame() {
-  initTailwind();
   canvas = document.getElementById('game-canvas');
-  ctx = canvas.getContext('2d', { alpha: true });
+  ctx = canvas.getContext('2d');
   logEl = document.getElementById('log');
   
   createInitialUnits();
-  
-  // Initial draw
   draw();
-  log('Welcome to Taiwan Strait 2027 prototype.');
-  log('You command Blue (Taiwan + allied assets). Red AI will invade.');
-  log('Select your units and move them to defend key terrain.');
+  log('Taiwan Strait 2027 v0.1.1 loaded.');
+  log('Improved touch detection - tap blue units firmly.');
+  log('You command Blue. Red AI will invade. Defend Taiwan!');
   
-  // Event listeners (mouse + touch)
-  canvas.addEventListener('click', handleCanvasClick);
-  canvas.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    handleCanvasClick(e);
-  }, { passive: false });
+  canvas.addEventListener('click', handlePointer);
+  canvas.addEventListener('touchstart', handlePointer, { passive: false });
   
-  // Keyboard hint
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       selectedUnit = null;
@@ -491,16 +462,8 @@ function initGame() {
     }
     if (e.key.toLowerCase() === 'e') endTurn();
   });
-  
-  // Initial log hint
-  setTimeout(() => {
-    if (logEl && logEl.children.length < 4) {
-      log('Tip: Press E or tap End Turn to let Red AI act.');
-    }
-  }, 8000);
 }
 
-// Boot
 window.onload = initGame;
 </script>
 </body>
